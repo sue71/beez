@@ -486,10 +486,33 @@
                  */
                 _remove: function _remove(view) {
 
-                    return this.then(function () {
-                        view.remove();
+                    this.then(function () {
                         return view;
                     });
+
+                    this.then(function conceal(view, next) {
+                        // if `conceal` have `done` as a param
+                        if (view.conceal.length) {
+                            view.conceal(function wrappedDone() {
+                                next(null, view);
+                            });
+                            return;
+                        }
+                        // else exec as sync
+                        view.conceal();
+                        next(null, view);
+                        return;
+                    });
+
+                    this.then(function remove(view, next) {
+                        // else exec as sync
+                        view.remove();
+                        next(null, view);
+                        return;
+                    });
+
+                    return this;
+
                 },
 
 
@@ -635,39 +658,32 @@
                     }
 
                     var self = this;
+
+                    var children = view.getChildren();
+
+                    if (_.isArray(view)) {
+                        //
+                    }
+
+                    if (children.length && hideChildren) {
+                        children.sort(function (a, b) {
+                            if (a.order < b.order) {
+                                return 1;
+                            }
+                            if (a.order > b.order) {
+                                return -1;
+                            }
+
+                            return 0;
+                        });
+                        _.each(children, function (v) {
+                            self._hide(v);
+                        });
+                    }
+
                     if (!_.isArray(view)) { // case of single view
                         logger.debug('hiding', view.vidx);
                         this._remove(view);
-
-                    } else { // create render tasks
-                        var tasks = _.map(
-                            view,
-                            function makeTask(v) {
-                                return function task(err, res, next) {
-                                    if (err) { throw err; }
-                                    new ViewAsync()
-                                        ._hide(v, hideChildren)
-                                        .end(function (err, ress) {
-                                            next(err, undefined);
-                                        });
-                                };
-                            }
-                        );
-                        this.waterfall(tasks);
-                    }
-
-                    if (hideChildren) {
-                        this.then(function hideC(view, next) {
-                            if (!view) { return next(null, view); }
-                            var children = view.getChildren();
-                            if (_.isEmpty(children)) {
-                                return next(null, view);
-                            } else {
-                                return new ViewAsync()
-                                    ._hide(children, hideChildren)
-                                    .end(next);
-                            }
-                        });
                     }
 
                     return this;
@@ -922,6 +938,24 @@
                     // call Base.dispose()
                     // View.__super__.dispose.call(this);
                 },
+
+                /**
+                 * The function performed before remove is performed
+                 * Until next runs to waiting after that function, to define a next as an argument, to delay the process.
+                 *
+                 * @memberof View
+                 * @instance
+                 * @function
+                 * @param {Function} [next]
+                 * @example
+                 * before: function before(next) {
+                 *     somethingAsync(function() {
+                 *         next();
+                 *     });
+                 * }
+                 */
+                conceal: beez.none,
+
                 /**
                  * Remove HTMLElement.
                  *
